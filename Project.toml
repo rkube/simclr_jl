@@ -1,0 +1,9 @@
+name = "simclr_jl"
+uuid = "5c3af287-4524-4ee8-9b0a-2c8bbe3cd1a3"
+authors = ["Ralph Kube <ralph_kube@gmx.net>"]
+version = "0.1.0"
+
+[deps]
+Augmentor = "02898b10-1f73-11ea-317c-6393d7073e15"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
