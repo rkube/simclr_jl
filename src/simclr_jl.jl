@@ -1,5 +1,7 @@
 module simclr_jl
 
-greet() = print("Hello World!")
+
+include("dataloading.jl")
+
 
 end # module simclr_jl
