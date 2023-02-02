@@ -1,6 +1,5 @@
-using MLUtils
 using Augmentor
-using MLUtils
+import MLUtils: getobs, getobs!, numobs
 using ImageCore
 """
 First attempt at defining a 'dataset' for the KSTAR ECEi data.
@@ -57,23 +56,38 @@ This requires that a numobs and getobs method is defined for this type.
     Introduce a contrastive dataset that returns mulitple, randomly augmented versions of each observation
 """
 
-export contrastive_ds, MLUtils.getobs, MLUtils.numobs
+export contrastive_ds, numobs, getobs #, getobs, getobs!, numobs
 
+"""
+    contrastive_ds{T}
+
+Defines a contastive dataset. The fundamental data type is the numerical array `data_arr`,
+with dimensions width, height, channels.
+trf defines a `Augmentor.jl` [pipeline](https://evizero.github.io/Augmentor.jl/stable/interface/#pipeline).
+n_views gives the number of requested augmentations per image.
+
+"""
 struct contrastive_ds{T}
     data_arr::T
     trf
     n_views::Int
 end
 
-MLUtils.getobs(ds::contrastive_ds) = ds
-MLUtils.numobs(ds::contrastive_ds) = size(ds.data_arr)[end]
+getobs(ds::contrastive_ds) = ds
+numobs(ds::contrastive_ds) = size(ds.data_arr)[end]
 
-# Define a custom getobs call that transforms one image with the pre-defined pipeline
-function MLUtils.getobs(ds::contrastive_ds, ix)
+
+"""
+    getobs(ds, ix)
+
+
+Returns the observation at `ix`, after transformation by the pipeline defined in the dataset.
+"""
+function getobs(ds::contrastive_ds, ix::Int)
     obs = ds.data_arr[:, :, :, ix]; # Fetch a single observation
     obs_img = colorview(RGB, permutedims(obs, (3, 1, 2))); # Convert single observation to RGB image
     # Allocate an empty array to store ds.n_views augmentations
-    obs_trf = Array{RGB{eltype(ds.data_arr)}, 3}(undef, 24, 8, ds.n_views)
+    obs_trf = Array{RGB{eltype(ds.data_arr)}, 3}(undef, size(ds.data_arr, 1), size(ds.data_arr, 2), ds.n_views)
   
     # Transform image with pipeline
     for ix_v ∈ axes(obs_trf, 3)
@@ -83,17 +97,26 @@ function MLUtils.getobs(ds::contrastive_ds, ix)
     obs_trf = permutedims(channelview(obs_trf), (2, 3, 1, 4))
 end
 
-# Define custom getobs for batches. With buffer allocation
-function MLUtils.getobs(ds::contrastive_ds, ix::AbstractVector)
+"""
+    MLUtils.getobs(ds, ix::AbstractVector)
+
+Returns multiple observations at `ix`, after transformation by the pipeline defined in the dataest.
+Pre-allocates a buffer to store the augmented images.
+"""
+function getobs(ds::contrastive_ds, ix::AbstractVector)
     # length(ix) is the effective batch_size
     batch_dim = [size(ds.data_arr)[[3, 1, 2]]..., ds.n_views, length(ix)]
     buffer = colorview(RGB, zeros(eltype(ds.data_arr), batch_dim...))
-    MLUtils.getobs!(buffer, ds, ix)
+    getobs!(buffer, ds, ix)
 end
 
-function MLUtils.getobs!(buffer, ds, ix)
-    @show "getobs!", ix
-    @show "getobs!", size(buffer)
+"""
+    getobs(ds, ix::AbstractVector)
+
+Returns multiple observations at `ix`, after transformation by the pipeline defined in the dataest.
+Needs to have a pre-allocated output buffer passed.
+"""
+function getobs!(buffer, ds, ix)
     batch = ds.data_arr[:, :, :, ix]
     batch_img = colorview(RGB, permutedims(batch, (3, 1, 2, 4)))
 

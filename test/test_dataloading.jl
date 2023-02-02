@@ -9,6 +9,8 @@ using ImageCore
 push!(LOAD_PATH, "/home/rkube/repos/kstar_ecei_data/")
 using kstar_ecei_data
 
+using simclr_jl
+
 # """
 #     Define a dataset for ECEI observations where random augmentations are applied to data.
 # """
