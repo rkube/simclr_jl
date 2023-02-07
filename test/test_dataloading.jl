@@ -48,17 +48,17 @@ data_trf = (data_trf .- mean(data_trf, dims=(1, 2, 4))) ./ std(data_trf, dims=(1
 # Define a pipeline
 pl = FlipX() * FlipY() * NoOp() |> GaussianBlur(3:2:7, 1f0:1f-1:2f0); # |> Rotate(-10:10) |>  CropNative(axes(data_trf)[1:2]) |>  GaussianBlur(3:2:7, 1f0:1f-1:2f0)
 # Instantiate dataset
-my_dset = kstar_ecei_dset(data_trf, pl)
+# my_dset = contrastive_ds(data_trf, pl)
 
-# Iterate over batches
-loader = DataLoader(my_dset, batchsize=32, shuffle=true)
-for (ix, bobs) ∈ enumerate(loader)
-    @show sum(bobs)
-end
+# # Iterate over batches
+# loader = DataLoader(my_dset, batchsize=32, shuffle=true)
+# for (ix, bobs) ∈ enumerate(loader)
+#     @show sum(bobs)
+# end
 
 
 n_views = 5
-ds_multi = kstar_ecei_simclr(data_trf, pl, n_views)
+ds_multi = contrastive_ds(data_trf, pl, n_views)
 
 # Get some observations and check
 # 1. That all features (ix_f = 1, 2, 3) have the are transformed identically.
