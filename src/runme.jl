@@ -31,13 +31,14 @@ data_trf = (data_trf .- mean(data_trf, dims=(1, 2, 4))) ./ std(data_trf, dims=(1
 
 # Define the dataset and set up data loader
 n_views = 2
-batch_size = 1024
+batch_size = 256
 τ = 1f-1
 num_epochs = 100
 
 #pl =  GaussianBlur(3:2:7, 1f0:1f-1:2f0) |> FlipX() * FlipY() * NoOp() |> Rotate(-10:10) |>  CropNative(axes(data_trf)[1:2]);
 
-pl =  GaussianBlur(3:2:7, 1f0:1f-1:2f0) |> ColorJitter() |> Zoom(0.8:0.05:1.2);
+#pl =  GaussianBlur(3:2:7, 1f0:1f-1:2f0) |> ColorJitter(0.8:0.1:1.2, -0.2:0.1:0.2) |> Zoom(0.8:0.05:1.2);
+pl = GaussianBlur(3:2:7, 1f0:1f-1:2f0) |>  Zoom(0.8:0.05:1.2);
 #
 ds_multi = contrastive_ds(data_trf, pl, n_views)
 
@@ -75,10 +76,13 @@ model = Chain(Conv((5, 3), 3 => 64, relu),
 model = model |> gpu;
 
 params = Flux.params(model)
-opt = ADAM(1e-3)
+opt = AdamW(1e-3, (0.9, 0.999), 1e-4)
 
 loss_vec = zeros(num_epochs);
 # Small-batch overfitting...
+
+# Generate the index tuples (2k-1, 2k), (2k, 2k-1) used to calculate the loss function
+ix_loss = [(k, iseven(k) ? k-1 : k+1) for k ∈ 1:batch_size]
 
 for epoch in 1:num_epochs
     for bobs ∈ loader
@@ -96,7 +100,11 @@ for epoch in 1:num_epochs
             # To calculate the loss function we need to calculate the matrix S with entries
             # sᵢⱼ = zᵢᵀzⱼ / ||zᵢ|| ||zⱼ||
             z_norm = sqrt.(sum(zs .* zs, dims=1));
-            S = exp.(zs' * zs ./ (z_norm' * z_norm) ./ τ);
+            S = zs' * zs ./ (z_norm' * z_norm) ./ τ;
+            
+            
+            
+            #S = exp.(zs' * zs ./ (z_norm' * z_norm) ./ τ);
 
             # The numerator is for ℓ(i,j) is then simply S[i,j]
 
@@ -108,17 +116,22 @@ for epoch in 1:num_epochs
             # ∑_{k=1}^{2N} [k≠1] exp(s₁ₖ/τ) = ∑_{k=1}^{2N} exp(s₁ₖ/τ) - exp(s₁₁/τ) 
             # That is, the denominator is the row-wise sum of S subtracted by the diagonal elements
 
-            denom = sum(S - Diagonal(S), dims=2)
-
-            # Generate the index tuples (2k-1, 2k), (2k, 2k-1) used to calculate the loss function
-            ix_loss = [(k, iseven(k) ? k-1 : k+1) for k ∈ 1:batch_size]
+            #denom = sum(S - Diagonal(S), dims=2)
 
             L = 0f0
-            for (ix, ij) ∈ enumerate(ix_loss)
-                L += -log(S[ij...] / denom[ix])
+            
+            #for ix ∈ eachindex(ix_loss)
+            #    L += -log(S[ix_loss[ix][1], ix_loss[ix][2]] / denom[ix]);
+            #end
+
+            for (i, j) ∈ ix_loss
+                L -= S[i, j];
             end
 
-            5f-1 * L / batch_size
+            # Set diagonal to large negative number so that are zero when applying exp to it.
+            #S[diagind(S)] .= -1f10;
+            #S = S .* one(S) * -1f10
+            5f-1 * (L + log(sum(exp.(S .+ (one(S) .* -1f10)))))/ batch_size 
         end
         grads = back(one(loss))
         
