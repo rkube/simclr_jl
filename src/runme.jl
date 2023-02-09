@@ -82,7 +82,12 @@ loss_vec = zeros(num_epochs);
 # Small-batch overfitting...
 
 # Generate the index tuples (2k-1, 2k), (2k, 2k-1) used to calculate the loss function
-ix_loss = [(k, iseven(k) ? k-1 : k+1) for k ∈ 1:batch_size]
+ix_loss = [(k, iseven(k) ? k-1 : k+1) for k ∈ 1:(2*batch_size)]
+# The same elements, but as a bool index array
+ix_arr = zeros(Bool, 2*batch_size, 2*batch_size)
+for ij ∈ ix_loss
+    ix_arr[ij...] = true
+end
 
 for epoch in 1:num_epochs
     for bobs ∈ loader
@@ -101,13 +106,13 @@ for epoch in 1:num_epochs
             # sᵢⱼ = zᵢᵀzⱼ / ||zᵢ|| ||zⱼ||
             z_norm = sqrt.(sum(zs .* zs, dims=1));
             S = zs' * zs ./ (z_norm' * z_norm) ./ τ;
-            
-            
-            
-            #S = exp.(zs' * zs ./ (z_norm' * z_norm) ./ τ);
+            # The numerator is for ℓ(i,j) is -log(exp(S)), so simply add -S[i,j] over the indices
+            L = -sum(S[ix_arr])
 
-            # The numerator is for ℓ(i,j) is then simply S[i,j]
-
+        #    L = 0f0    
+        #    for (i, j) ∈ ix_loss
+        #        L -= S[i, j];
+        #    end
             # The loss function for a positive pair (i.e. (2k-1, 2k), (2k, 2k-1) for k=1...N = (1,2), (2,1), (3,4), (4,3), (5,6), (6,5)...
             # is given by ℓ(i,j) = -log [exp(sᵢⱼ/τ) / ∑_{k=1}^{2N} [k≠i] exp(sᵢₖ/τ) ]
             # That is, the denominator for ℓ(2,1) is 
@@ -115,23 +120,35 @@ for epoch in 1:num_epochs
             # For ℓ(1,2) the denominator is
             # ∑_{k=1}^{2N} [k≠1] exp(s₁ₖ/τ) = ∑_{k=1}^{2N} exp(s₁ₖ/τ) - exp(s₁₁/τ) 
             # That is, the denominator is the row-wise sum of S subtracted by the diagonal elements
+            # Instead of doing this, we use that exp(-large number) ≈ 0 and add just such a diagonal
+            # matrix to S before taking exp of it.
+            L = 5f-1 * (L + log(sum(exp.(S .+ (one(S) .* -1f10))))) / batch_size 
 
-            #denom = sum(S - Diagonal(S), dims=2)
+            # Log output
+            # Find out, how often the resepctive positive example is in the top-1 and top-5 cosine similarity matrix
+            # See https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial17/SimCLR.html
+            Zygote.ignore() do 
+                # Fetch the cosine similarity of the matching pair example.
+                S_other = S[ix_arr]
+                # Right to the row-vector S_other, put all other cosine similarities, but with the cosine similarity
+                # of the example to itself and the matching example set to a small negative value
+                S2 = copy(S)
+                S2[ix_arr] .= -9f5
+                S2[diagind(S2)] .= -9f5
+                # Stack the matrices next to each other
+                S_all = [S_other S2] |> cpu;
 
-            L = 0f0
-            
-            #for ix ∈ eachindex(ix_loss)
-            #    L += -log(S[ix_loss[ix][1], ix_loss[ix][2]] / denom[ix]);
-            #end
-
-            for (i, j) ∈ ix_loss
-                L -= S[i, j];
+                # Find the index with the largest cosine similarity in each row. Index==1 means 
+                # that the augmented example has largest similarity.
+                ranking_ix = [x[2] for x in argmax(sortslices(S_all, dims=2, rev=true), dims=2)]
+                # Top-1 accuracy:
+                top1 = mean(ranking_ix .== 1)
+                top5 = mean(ranking_ix .<= 5)
+                @show top1, top5
             end
 
-            # Set diagonal to large negative number so that are zero when applying exp to it.
-            #S[diagind(S)] .= -1f10;
-            #S = S .* one(S) * -1f10
-            5f-1 * (L + log(sum(exp.(S .+ (one(S) .* -1f10)))))/ batch_size 
+
+            L
         end
         grads = back(one(loss))
         
@@ -147,7 +164,7 @@ end
 # Train a multiclass logistic regression classifier on the representations of the data.
 # https://sophiamyang.github.io/DS/optimization/multiclass-logistic/multiclass-logistic.html
 num_classes = 2
-bs_lr = 8192
+bs_lr = 16384
 # Take every second sample. That is because the two different augmented sampels of a single image are
 # consecutive in the last dimension
 loader_lr = DataLoader(ds_multi, batchsize=bs_lr, shuffle=false, partial=false)
