@@ -17,9 +17,9 @@ using simclr_jl
 """
     Load ECEI data
 """
-shotnr = 26327
-data_norm, tbase_norm = get_shot_data(26327; basedir="/home/rkube/gpfs/kstar_ecei")
-labels = get_labels(26327);
+shotnr = 26512
+data_norm, tbase_norm = get_shot_data(26512; basedir="/home/rkube/gpfs/kstar_ecei")
+labels = get_labels(26512);
 num_samples = size(data_norm)[end]
 # Stack data, first, and second derivative
 data_trf = zeros(Float32, 24, 8, 3, num_samples-2);
@@ -114,8 +114,8 @@ for epoch in 1:num_epochs
             ix_loss = [(k, iseven(k) ? k-1 : k+1) for k ∈ 1:batch_size]
 
             L = 0f0
-            for i ∈ eachindex(ix_loss)
-                L += -log(S[i] / denom[i])
+            for (ix, ij) ∈ enumerate(ix_loss)
+                L += -log(S[ij...] / denom[ix])
             end
 
             5f-1 * L / batch_size
